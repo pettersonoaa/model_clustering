@@ -14,6 +14,12 @@ from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score, davies_bouldin_score
 from sklearn.decomposition import PCA 
 
+# --- Configuration ---
+OUTPUT_FILES = "output_files" # Directory to save output files (ensure it exists)
+if not os.path.exists(OUTPUT_FILES):
+    os.makedirs(OUTPUT_FILES)
+    print(f"Created directory: {OUTPUT_FILES}")
+
 CLUSTER_COLORS = {
     0: 'blue',
     1: 'orange',
@@ -147,7 +153,7 @@ def visualize_clustering_results(
     data_2d = pca.fit_transform(data_for_viz)
 
     plt.figure(figsize=(10, 8))
-    
+
     # Use CLUSTER_COLORS to assign colors to clusters
     unique_labels_viz = np.unique(labels_for_viz)
     for label in unique_labels_viz:
@@ -229,14 +235,88 @@ def analyze_cluster_features(
 
     return cluster_feature_means
 
+def clustering_pipeline(
+        X, 
+        model_name="KMeans", 
+        n_clusters=4, 
+        sample_size=None, 
+        max_k=10, 
+        elbow_analysis=False, 
+        show_plots=True, 
+        feature_names=None
+    ):
+    """
+    A pipeline function to perform clustering, visualize results, and analyze features.
+
+    Parameters:
+    - X (ndarray): The dataset (scaled or unscaled).
+    - model_name (str): The clustering model to use (e.g., "KMeans").
+    - n_clusters (int): Number of clusters for the model.
+    - sample_size (int): Optional sample size for faster processing.
+    - max_k (int): Maximum number of clusters for Elbow Method analysis.
+    - elbow_analysis (bool): Whether to perform Elbow Method analysis.
+    - show_plots (bool): Whether to display plots.
+    - feature_names (list): Optional list of feature names.
+
+    Returns:
+    - feature_means (DataFrame): Mean values of features for each cluster.
+    """
+    print("\n--- Starting Clustering Pipeline ---")
+
+    # Step 1: Preprocess the data
+    print("\n--- Preprocessing Data ---")
+    scaler = StandardScaler()
+    preprocessor = Pipeline([('scaler', scaler)])
+    X_processed = preprocessor.fit_transform(X)
+    print("Data preprocessing complete.")
+
+    # Step 2: Perform Elbow Method analysis (optional)
+    if elbow_analysis:
+        print("\n--- Performing Elbow Method Analysis ---")
+        find_best_k_elbow(
+            model_name=model_name, 
+            X=X, 
+            max_k=max_k, 
+            sample_size=sample_size, 
+            show=show_plots
+        )
+
+    # Step 3: Fit the selected clustering model
+    print(f"\n--- Fitting {model_name} Model ---")
+    model_results = fit_model(X=X, n_clusters=n_clusters, sample_size=sample_size, verbose=1)
+
+    # Step 4: Visualize clustering results
+    print("\n--- Visualizing Clustering Results ---")
+    visualize_clustering_results(
+        model_name=model_name, 
+        data_for_viz=model_results['data'], 
+        labels_for_viz=model_results['labels'], 
+        show=show_plots
+    )
+
+    # Step 5: Analyze cluster features
+    print("\n--- Analyzing Cluster Features ---")
+    feature_means = analyze_cluster_features(
+        model_name=model_name,
+        X=model_results['data'], 
+        labels=model_results['labels'], 
+        feature_names=feature_names, 
+        show=show_plots
+    )
+
+    print("\n--- Clustering Pipeline Complete ---")
+    return feature_means
 
 
 
-# --- Configuration ---
-OUTPUT_FILES = "output_files" # Directory to save output files (ensure it exists)
-if not os.path.exists(OUTPUT_FILES):
-    os.makedirs(OUTPUT_FILES)
-    print(f"Created directory: {OUTPUT_FILES}")
+
+
+
+
+
+
+
+# ---     PIPELINE STARTS     ---
 
 # --- Data Loading/Generation ---
 X, _ = make_blobs(
@@ -246,35 +326,20 @@ X, _ = make_blobs(
     cluster_std=6,
     random_state=42
 )
+
 print("Data generation complete.")
-
-SELECTED_MODEL="KMeans"
-SHOW_PLT=True
-ELBOW_ANALYSIS=False
-SAMPLE_SIZE=10_000 # 100_000 = 100 seconds per training
-
-model_results = fit_model(X=X, n_clusters=4, verbose=1)
-
-if ELBOW_ANALYSIS:
-    find_best_k_elbow(
-        model_name=SELECTED_MODEL, 
-        X=X, 
-        max_k=10, 
-        sample_size=SAMPLE_SIZE, 
-        show=SHOW_PLT
-    )
-
-visualize_clustering_results(
-    model_name=SELECTED_MODEL, 
-    data_for_viz=model_results['data'],
-    labels_for_viz=model_results['labels'], 
-    show=SHOW_PLT
-)
-feature_means = analyze_cluster_features(
-    model_name=SELECTED_MODEL,
-    X=model_results['data'], 
-    labels=model_results['labels'], 
-    show=SHOW_PLT
+# Run the clustering pipeline
+feature_means = clustering_pipeline(
+    X=X,
+    model_name="KMeans",
+    n_clusters=4,
+    sample_size=10_000, # 100_000 = 100 seconds per training
+    max_k=10,
+    elbow_analysis=True,
+    show_plots=True,
+    feature_names=[f"Feature_{i+1}" for i in range(20)]
 )
 
-print("\nPipeline finished.")
+# Print the feature means
+# print("\nFeature Means per Cluster:")
+# print(feature_means)
