@@ -9,6 +9,7 @@ from matplotlib import colormaps
 from sklearn.datasets import make_blobs
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.cluster import KMeans, MiniBatchKMeans, DBSCAN, AffinityPropagation, MeanShift, AgglomerativeClustering
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score, davies_bouldin_score
@@ -235,6 +236,190 @@ def analyze_cluster_features(
 
     return cluster_feature_means
 
+def plot_violin_features(
+        model_name: str, 
+        X, 
+        labels, 
+        feature_names=None, 
+        output_file_name="feature_violin",
+        features_per_figure=5,
+        show=False
+    ):
+    """
+    Create violin plots for each feature to analyze feature distributions across clusters.
+
+    Parameters:
+    - X (ndarray): The dataset (scaled or unscaled).
+    - labels (ndarray): Cluster labels for each data point.
+    - feature_names (list): Optional list of feature names.
+    - output_file_name (str): The file name to save the plot.
+    - show (bool): Whether to display the plot.
+    """
+
+    # Convert to DataFrame for easier plotting
+    feature_names = feature_names if feature_names else [f"Feature_{i+1}" for i in range(X.shape[1])]
+    df = pd.DataFrame(X, columns=feature_names)
+    df['Cluster'] = labels
+
+    # Determine the number of figures needed
+    num_features = len(feature_names)
+    num_figures = (num_features + features_per_figure - 1) // features_per_figure  # Ceiling division
+
+    for fig_idx in range(num_figures):
+        start_idx = fig_idx * features_per_figure
+        end_idx = min(start_idx + features_per_figure, num_features)
+        selected_features = feature_names[start_idx:end_idx]
+
+        # Create a figure for the selected features
+        fig, axes = plt.subplots(
+            nrows=len(selected_features), 
+            ncols=1, 
+            figsize=(12, 5 * len(selected_features)), 
+            sharex=True
+        )
+
+        # Ensure axes is iterable even for a single subplot
+        if len(selected_features) == 1:
+            axes = [axes]
+
+        # Plot each feature as a violin plot
+        for i, feature in enumerate(selected_features):
+            sns.violinplot(
+                x='Cluster', 
+                y=feature, 
+                data=df, 
+                ax=axes[i], 
+                hue='Cluster',
+                palette=[CLUSTER_COLORS.get(cluster, 'gray') for cluster in sorted(df['Cluster'].unique())],
+                legend=False
+            )
+            axes[i].set_title(f"Violin Plot for {feature}")
+            axes[i].set_xlabel("Cluster")
+            axes[i].set_ylabel(feature)
+
+        # Adjust layout
+        plt.tight_layout()
+
+        # Save the figure
+        figure_file_name = f"{OUTPUT_FILES}/{output_file_name}_{model_name}_{fig_idx + 1}.png"
+        plt.savefig(figure_file_name, dpi=300, bbox_inches='tight')
+        print(f"Figure saved to {figure_file_name}")
+
+        # Show the plot
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+
+def analyze_feature_importance(
+        model_name: str, 
+        X, 
+        labels, 
+        feature_names=None, 
+        top_n=None,
+        output_file_name="feature_analysis", 
+        verbose=0,
+        show=True
+    ):
+    """
+    Analyze feature importance using Decision Tree Importance, Correlation Analysis, and Variance Across Clusters.
+
+    Parameters:
+    - X (ndarray): The dataset (scaled or unscaled).
+    - labels (ndarray): Cluster labels for each data point.
+    - feature_names (list): Optional list of feature names.
+    - output_file_name (str): The file name to save the plot.
+    - show (bool): Whether to display the plot.
+    - top_n (int): Number of top features to display (optional).
+
+    Returns:
+    - combined_df (DataFrame): Combined DataFrame with feature importance metrics.
+    """
+
+    # Convert to DataFrame for easier analysis
+    feature_names = feature_names if feature_names else [f"Feature_{i+1}" for i in range(X.shape[1])]
+    df = pd.DataFrame(X, columns=feature_names)
+    df['Cluster'] = labels
+
+    # --- Decision Tree Importance ---
+    clf = DecisionTreeClassifier(random_state=42)
+    clf.fit(X, labels)
+    decision_tree_importance = pd.DataFrame({
+        'Feature': feature_names,
+        'DecisionTreeImportance': clf.feature_importances_
+    })
+
+    # --- Correlation Analysis ---
+    correlations = df.corr()['Cluster'].drop('Cluster').abs().reset_index()
+    correlations.columns = ['Feature', 'Correlation']
+
+    # --- Variance Across Clusters ---
+    variance = df.groupby('Cluster').var().mean().reset_index()
+    variance.columns = ['Feature', 'Variance']
+
+    # --- Combine Results ---
+    combined_df = decision_tree_importance.merge(correlations, on='Feature').merge(variance, on='Feature')
+    combined_df = combined_df.sort_values(by='DecisionTreeImportance', ascending=False)
+
+    # Optionally, limit to top N features
+    if top_n:
+        combined_df = combined_df.head(top_n)
+
+    if verbose > 0:
+        print("\nCombined Feature Importance Metrics:")
+        print(combined_df)
+
+    # --- Plot Results ---
+    fig, ax1 = plt.subplots(figsize=(14, 8))
+
+    # Bar plot for Decision Tree Importance
+    x = range(len(combined_df))
+    ax1.bar(x, combined_df['DecisionTreeImportance'], color='blue', alpha=0.7, label='Decision Tree Importance')
+    ax1.set_xlabel('Features')
+    ax1.set_ylabel('Importance', color='blue')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(combined_df['Feature'], rotation=45, ha='right')
+    ax1.tick_params(axis='y', labelcolor='blue')
+    ax1.grid(axis='y', linestyle='--', alpha=0.7)
+
+    # Line plots for Correlation and Variance
+    ax2 = ax1.twinx()
+    ax2.plot(x, combined_df['Correlation'], color='orange', marker='o', label='Correlation')
+    ax2.plot(x, combined_df['Variance'], color='green', marker='o', label='Variance')
+    ax2.set_ylabel('Correlation / Variance', color='black')
+    ax2.tick_params(axis='y', labelcolor='black')
+
+    # Add legends
+    ax1.legend(loc='upper left')
+    ax2.legend(loc='upper right')
+
+    # Add explanation text at the bottom
+    explanation_text = (
+        "How to interpret the metrics:\n"
+        "- Decision Tree Importance (bars): Measures how well each feature splits the clusters.\n"
+        "- Correlation (orange line): Indicates the strength of the relationship between the feature and cluster labels.\n"
+        "- Variance (green line): Shows the variability of the feature across clusters."
+    )
+    plt.figtext(
+        0.5, -0.05, explanation_text, wrap=True, horizontalalignment='center', fontsize=10, bbox=dict(facecolor='white', alpha=0.8)
+    )
+
+    # Adjust layout to avoid cropping
+    plt.subplots_adjust(bottom=0.2)
+
+    plt.title('Feature Importance Metrics')
+    plt.tight_layout()
+
+    # Save the plot
+    plt.savefig(f"{OUTPUT_FILES}/{output_file_name}_{model_name}.png", dpi=300, bbox_inches='tight')
+    print(f"Figure saved to {output_file_name}")
+
+    # Show the plot
+    if show:
+        plt.show()
+
+    return combined_df
+
 def clustering_pipeline(
         X, 
         model_name="KMeans", 
@@ -242,6 +427,10 @@ def clustering_pipeline(
         sample_size=None, 
         max_k=10, 
         elbow_analysis=False, 
+        clustering_plot=True,
+        heatmap_plot=True,
+        violin_plot=True,
+        feature_importance=True,
         show_plots=True, 
         feature_names=None
     ):
@@ -286,26 +475,53 @@ def clustering_pipeline(
     model_results = fit_model(X=X, n_clusters=n_clusters, sample_size=sample_size, verbose=1)
 
     # Step 4: Visualize clustering results
-    print("\n--- Visualizing Clustering Results ---")
-    visualize_clustering_results(
-        model_name=model_name, 
-        data_for_viz=model_results['data'], 
-        labels_for_viz=model_results['labels'], 
-        show=show_plots
-    )
+    if clustering_plot:
+        print("\n--- Visualizing Clustering Results ---")
+        visualize_clustering_results(
+            model_name=model_name, 
+            data_for_viz=model_results['data'], 
+            labels_for_viz=model_results['labels'], 
+            show=show_plots
+        )
 
     # Step 5: Analyze cluster features
-    print("\n--- Analyzing Cluster Features ---")
-    feature_means = analyze_cluster_features(
-        model_name=model_name,
-        X=model_results['data'], 
-        labels=model_results['labels'], 
-        feature_names=feature_names, 
-        show=show_plots
-    )
+    if heatmap_plot:
+        print("\n--- Visualizing Cluster by Features ---")
+        analyze_cluster_features(
+            model_name=model_name, 
+            X=model_results['data'], 
+            labels=model_results['labels'], 
+            feature_names=feature_names, 
+            show=show_plots
+        )
+
+    # Step 6: Generate violin plots for the features
+    if violin_plot:
+        print("\n--- Visualizing Violing by Features ---")
+        plot_violin_features(
+            model_name=model_name,
+            X=model_results['data'],
+            labels=model_results['labels'], 
+            feature_names=feature_names, 
+            features_per_figure=3,  # Adjust as needed
+            show=show_plots
+        )
+    
+    # Step 7: Analyze feature importance and plot results
+    if feature_importance:
+        print("\n--- Analyzing Feature Importance ---")
+        # Analyze feature importance using Decision Tree Importance, Correlation Analysis, and Variance Across Clusters
+        # and plot the results
+        combined_metrics = analyze_feature_importance(
+            model_name=model_name,
+            X=model_results['data'],
+            labels=model_results['labels'], 
+            feature_names=feature_names,
+            top_n=10,  # Adjust as needed
+            show=show_plots
+        )
 
     print("\n--- Clustering Pipeline Complete ---")
-    return feature_means
 
 
 
@@ -336,6 +552,10 @@ feature_means = clustering_pipeline(
     sample_size=10_000, # 100_000 = 100 seconds per training
     max_k=10,
     elbow_analysis=True,
+    clustering_plot=True,
+    heatmap_plot=True,
+    violin_plot=True,
+    feature_importance=True,
     show_plots=True,
     feature_names=[f"Feature_{i+1}" for i in range(20)]
 )
