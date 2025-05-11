@@ -22,17 +22,22 @@ if not os.path.exists(OUTPUT_FILES):
     print(f"Created directory: {OUTPUT_FILES}")
 
 CLUSTER_COLORS = {
-    0: 'blue',
-    1: 'orange',
-    2: 'green',
-    3: 'red',
-    4: 'brown',
-    5: 'pink',
-    6: 'gray',
-    7: 'olive',
-    8: 'cyan',
-    9: 'purple',
-    10: 'magenta',
+    0: 'tab:blue',
+    1: 'tab:orange',
+    2: 'tab:green',
+    3: 'tab:red',
+    4: 'tab:brown',
+    5: 'tab:cyan',
+    6: 'tab:olive',
+    7: 'tab:gray',
+    8: 'tab:purple',
+    9: 'slategray',
+    10: 'darkslategray',
+    11: 'teal',
+    12: 'darkturquoise',
+    13: 'tomato',
+    14: 'cadetblue',
+    15: 'olivedrab',
 }
 
 
@@ -109,18 +114,18 @@ def find_best_k_elbow(model_name, X, max_k=10, sample_size=None, show=False):
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     # Elbow Method Plot
-    axes[0].plot(range(2, max_k + 1), inertias, marker='o', color='blue')
+    axes[0].plot(range(2, max_k + 1), inertias, marker='o', markersize=10, color=CLUSTER_COLORS[0], linewidth=3)
     axes[0].set_title("Elbow Method for Optimal K")
     axes[0].set_xlabel("Number of Clusters (K)")
     axes[0].set_ylabel("Inertia (Sum of Squared Distances)")
-    axes[0].grid(True)
+    axes[0].grid(True, linestyle='-', alpha=0.5)
 
     # Silhouette Score Plot
-    axes[1].plot(range(2, max_k + 1), silhouette_scores, marker='o', color='green')
+    axes[1].plot(range(2, max_k + 1), silhouette_scores, marker='o', markersize=10, color=CLUSTER_COLORS[1], linewidth=3)
     axes[1].set_title("Silhouette Score for Optimal K")
     axes[1].set_xlabel("Number of Clusters (K)")
     axes[1].set_ylabel("Silhouette Score")
-    axes[1].grid(True)
+    axes[1].grid(True, linestyle='-', alpha=0.5)
 
     # Adjust layout
     plt.tight_layout()
@@ -171,7 +176,7 @@ def visualize_clustering_results(
     plt.ylabel('PCA Component 2')
     if len(unique_labels_viz) < 15:  # Avoid overly crowded legend
         plt.legend()
-    plt.grid(True)
+    plt.grid(True, linestyle='-', alpha=0.5)
 
     # Save the figure
     output_file_name = f"{OUTPUT_FILES}/clustering_visualization_{model_name}.png"
@@ -374,18 +379,18 @@ def analyze_feature_importance(
 
     # Bar plot for Decision Tree Importance
     x = range(len(combined_df))
-    ax1.bar(x, combined_df['DecisionTreeImportance'], color='blue', alpha=0.7, label='Decision Tree Importance')
+    ax1.bar(x, combined_df['DecisionTreeImportance'], color=CLUSTER_COLORS[7], alpha=1.0, label='Decision Tree Importance')
     ax1.set_xlabel('Features')
-    ax1.set_ylabel('Importance', color='blue')
+    ax1.set_ylabel('Importance')
     ax1.set_xticks(x)
     ax1.set_xticklabels(combined_df['Feature'], rotation=45, ha='right')
-    ax1.tick_params(axis='y', labelcolor='blue')
-    ax1.grid(axis='y', linestyle='--', alpha=0.7)
+    ax1.tick_params(axis='y')
+    ax1.grid(axis='y', linestyle='-', alpha=0.5)
 
     # Line plots for Correlation and Variance
     ax2 = ax1.twinx()
-    ax2.plot(x, combined_df['Correlation'], color='orange', marker='o', label='Correlation')
-    ax2.plot(x, combined_df['Variance'], color='green', marker='o', label='Variance')
+    ax2.plot(x, combined_df['Correlation'], color=CLUSTER_COLORS[0], linewidth=3, marker='o', markersize=10, label='Correlation')
+    ax2.plot(x, combined_df['Variance'], color=CLUSTER_COLORS[1], linewidth=3, marker='o', markersize=10, label='Variance')
     ax2.set_ylabel('Correlation / Variance', color='black')
     ax2.tick_params(axis='y', labelcolor='black')
 
@@ -554,7 +559,7 @@ feature_means = clustering_pipeline(
     elbow_analysis=True,
     clustering_plot=True,
     heatmap_plot=True,
-    violin_plot=True,
+    violin_plot=False,
     feature_importance=True,
     show_plots=True,
     feature_names=[f"Feature_{i+1}" for i in range(20)]
